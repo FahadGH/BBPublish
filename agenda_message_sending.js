@@ -1,0 +1,378 @@
+var mongoConnectionString = "mongodb://127.0.0.1/agenda";
+var Agenda = require('agenda');
+var Redis = require('ioredis');
+var request = require("request");
+var Sequelize = require('sequelize');
+var twilio = require('twilio');
+//var redis = new Redis(6379, '54.172.106.143');
+var redis = new Redis();
+var FOUR_HOUR =  9*60 * 60 * 1000 ; /* ms adding (5+4) for utc 5h diff */
+redis.subscribe('ScheduleMessage-channel', function(err, count) {
+
+});
+/*
+DB_HOST=localhost
+DB_DATABASE=dev_bumblebee_app
+DB_USERNAME=root
+DB_PASSWORD=pP17Lo_4t55#
+*/
+var sequelize = new Sequelize('dev_bumblebee_app', 'root', 'pP17Lo_4t55#', {
+  host: 'localhost',
+  dialect: 'mysql',
+  pool: {
+    max: 5,
+    min: 0,
+    idle: 10000
+  },
+  define: {
+    timestamps: false // true by default
+  },
+});
+
+/*var sequelize = new Sequelize('db_bumble_bee', 'root', 'root', {
+  host: 'localhost',
+  dialect: 'mysql',
+  pool: {
+    max: 5,
+    min: 0,
+    idle: 10000
+  },
+  define: {
+    timestamps: false // true by default
+  },
+});*/
+/*models*/
+var Users = sequelize.define('users', {}); // timestamps is false by default
+var Lists = sequelize.define('lists', {});
+var Settings = sequelize.define('user_settings', {});
+var Contacts = sequelize.define('user_contacts', {});
+var BBCounts = sequelize.define('bumblebee_counts', {});
+var ListContacts =  sequelize.define('lists_contacts', {});
+/*models for sql*/
+
+var agenda = new Agenda({db: {address: mongoConnectionString}});
+
+var sentNum = [];
+
+function getData(callBack){
+  callBack();
+}
+
+function startSendingRequests(callBack){
+  callBack();
+}  
+
+function updateCounts(jobData){
+  
+  sequelize.query('SELECT * from bumblebee_counts where user_id='+ jobData.user_id +' and type="non-crm" and MONTH( NOW( ) ) = MONTH( billing_month )', { model: BBCounts }).then(function(count){
+    // Each record will now be a instance of Project
+    //console.log("from db result is",count);
+      if(count.length == 0){
+        //insert here
+        st = (new Date()).toISOString().substring(0, 19).replace('T', ' ');
+        //BBCounts.create({user_id:20,type:'non-crm',count:1,updated_at:st});
+
+        sequelize.query("INSERT INTO `bumblebee_counts` (`user_id`,`type`,`count`,`updated_at`,`billing_month`) VALUES ("+jobData.user_id+",'non-crm',1,'"+st+"','"+st+"')").spread(function(results, metadata) {
+         
+        })
+      }else{
+        //update
+        st = (new Date()).toISOString().substring(0, 19).replace('T', ' ');
+        sequelize.query("UPDATE `bumblebee_counts` set count=count+1,updated_at='"+st+"',billing_month='"+st+"' where user_id="+jobData.user_id+" and type='non-crm'").spread(function(results, metadata) {
+         
+        })
+        console.log("update the record");
+      }
+      // project will be the first entry of the Projects table with the title 'aProject' || null
+  })
+}
+
+function prepData(mydata,done,client){
+  console.log(mydata);
+  
+  totalItems = mydata.total_items;
+  listId = mydata.list_id;
+  totalNumbers = mydata.total_numbers;
+  numbers = mydata.numbers;
+  sendMessagesToList(listId,totalItems,totalNumbers,numbers,mydata,done,client);
+}
+
+function sendMessagesToList(listId,totalItems,totalNumbers,numbers,jobData,done,client){
+  var count = 0;
+  var jobLimit = parseInt(totalItems)/parseInt(totalNumbers);
+  console.log("job limit is" + jobLimit);
+  
+  var page = 1;
+  var limit = Math.ceil(parseInt(totalNumbers));
+  var myJob = setInterval(function(){
+    offset = (parseInt(page) * limit) - limit;
+    /*console.log("===================");
+    console.log("the list is "+listId);
+    console.log("the page is "+page);
+    console.log("the limit is "+limit);
+    console.log("the offset is "+offset);
+    console.log("===================");*/
+    cquery = "SELECT lc.id, lc.contact_id, uc.f_name, uc.l_name, uc.phone";
+    cquery += " FROM  `lists_contacts` lc, user_contacts uc";
+    cquery +=  " WHERE lc.list_id ="+listId;
+    cquery +=  " AND uc.id = lc.contact_id";
+    cquery +=  " group by uc.phone";
+    cquery +=  " ORDER BY lc.id ASC"; 
+    cquery +=  " LIMIT " +offset+ ", " +limit + ";";
+
+    sequelize.query(cquery, { type: sequelize.QueryTypes.SELECT})
+    .then(function(users) {
+      for(var x in users){
+        //console.log(users[x])
+        fromNum = false;
+        if(jobData.numbers.length==1){
+          fromNum = jobData.numbers[0];
+        }else{
+          if(jobData.numbers.length > 1){
+            fromNum = jobData.numbers[x]
+          }                      
+        }
+        if(fromNum){
+          if(jobData.type == "sms"){
+           /*console.log("***********************");
+            console.log(users[x])
+	    console.log("to" + users[x].phone)
+            console.log("from" + fromNum)
+            console.log("body" + jobData.message)
+	    console.log(jobData.scheduled_time)
+            console.log("***********************");*/
+	    	
+            var t = jobData.scheduled_time.split(/[- :]/);
+            // Apply each element to the Date function
+            var d = new Date(Date.UTC(t[0], t[1]-1, t[2], t[3], t[4], t[5]));
+            var n = new Date();
+            var diff = n - d;
+
+            if( diff < FOUR_HOUR){
+              var index = sentNum.indexOf(users[x].phone);
+              if (index !== -1) {
+		       var sendMessagePromise = client.sendMessage({
+        	          to:"+1"+users[x].phone, // Any number Twilio can deliver to
+                	  from: fromNum, // A number you bought from Twilio and can use for outbound communication
+                 	 body: jobData.message+" STOP to end." // body of the SMS message
+              	});
+             	 sendMessagePromise.then(function(message) {
+                	sentNum.push(users[x].phone);
+			console.log('message sent successfully',message);
+               	        updateCounts(jobData);
+              	}, function(error) {
+                	  console.error('message failed!  Reason: '+error.message);
+                });
+	      }
+            }
+          }
+          else{
+            
+            if(jobData.type == "mms" && jobData.subType == "picture_message"){
+              console.log("***********************");
+              console.log("to" + users[x].phone)
+              console.log("from" + fromNum)
+              console.log("body" + jobData.message)
+              console.log("mediaUrl" + jobData.mediaUrl)
+              console.log("***********************");
+              console.log(jobData.scheduled_time)
+              var t = jobData.scheduled_time.split(/[- :]/);
+              // Apply each element to the Date function
+              var d = new Date(Date.UTC(t[0], t[1]-1, t[2], t[3], t[4], t[5]));
+	      var n = new Date();
+	       var diff = n - d;
+              if( diff < FOUR_HOUR){
+		var index = sentNum.indexOf(users[x].phone);
+                if (index !== -1) {
+               	 var sendMessagePromise = client.sendMessage({
+                	    to:"+1"+users[x].phone, // Any number Twilio can deliver to
+               	    	    from: fromNum, // A number you bought from Twilio and can use for outbound communication
+               		    body: jobData.message, // body of the SMS message
+                    	    mediaUrl: jobData.mediaUrl,
+               	 });
+              	 sendMessagePromise.then(function(message) {
+                 	 sentNum.push(users[x].phone);
+			 console.log('message sent successfully',message);
+                 	 updateCounts(jobData);
+                 }, function(error) {
+                 	   console.error('message failed!  Reason: '+error.message);
+                 });
+	       }	      
+	      }
+              //updateCounts(jobData);
+            }
+            if(jobData.type == "mms" && jobData.subType == "voice_message"){
+             console.log(jobData);
+	     console.log("http://alpha.bumblebeeprospectingsystems.com/twiml/voice/"+jobData.messageTmplId); 
+	     console.log("voice message");
+  
+             console.log(jobData.scheduled_time)
+	      var t = jobData.scheduled_time.split(/[- :]/);
+              // Apply each element to the Date function
+              var d = new Date(Date.UTC(t[0], t[1]-1, t[2], t[3], t[4], t[5]));
+              var n = new Date();
+              var diff = n - d;
+              if( diff < FOUR_HOUR){
+                var index = sentNum.indexOf(users[x].phone);
+                if (index !== -1) {	
+		 client.calls.create({
+                	    url: "http://alpha.bumblebeeprospectingsystems.com/twiml/voice/"+jobData.messageTmplId,
+                  	    to: "+1"+users[x].phone,
+                   	    from: fromNum,
+               	 }, function(err, call) {
+                	    //process.stdout.write(call.sid);
+                   	   var index = sentNum.indexOf(users[x].phone);    // <-- Not supported in <IE9
+                      	   if (index !== -1) {
+                          	sentNum.splice(index, 1);
+                      	   } 
+			   console.error(call.sid);
+               	 });
+              }
+            }
+          }
+        }
+        //console.log("the user",users[x].dataValues);
+      }
+    })
+
+    page++; //move on to next contact 
+    count++;
+    if(count >= jobLimit){
+      clearInterval(myJob);
+      done(); //to send message job is done;
+    }
+  }, 1000);
+}
+
+agenda.define('send message to list', function(job, done) {
+  getData(function(){
+    var jobData = job.attrs.data;
+    var client = new twilio.RestClient(jobData.twilio_sid, jobData.twilio_token);
+    currentDate = new Date();
+    scheduledTime = new Date(jobData.scheduled_time);
+    //console.log(currentDate.getTime());
+    //console.log(scheduledTime.getTime());
+    if(currentDate.getTime() >= scheduledTime.getTime()){
+      job.touch(function() {
+        startSendingRequests(function() {
+          numbers = jobData.numbers;
+          if(Object.prototype.toString.call( numbers ) === '[object Array]'){
+            prepData(jobData,done,client); 
+          }
+        });
+      });
+    }else{
+      done(); //lock the job only at scheduled time
+    }
+  });
+});
+
+agenda.on('ready', function() {
+ console.log("started"); 
+ redis.on('message', function (channel, message) {
+    console.log('Receive message %s from channel %s', message, channel);
+    mData = JSON.parse(message);
+    //schedule it for individiual list
+    if(mData.data.data.list_id.length > 0){
+      var count = 0;
+      var listJob = setInterval(function(){ 
+        jbData = mData.data.data; 
+        list = mData.data.data.list_id[count];
+        sequelize.query('SELECT count(*) as count,list_id from lists_contacts where list_id='+ list ,
+                  { model: ListContacts }).
+                  then(function(countRes){
+                  // addTime = count *1000;
+                  // dateT = new Date(jbData.scheduled_time);
+                  // console.log(dateT.getTime());
+                  // newStTime =  parseInt(dateT.getTime()) + parseInt(addTime);
+                  // nT = new Date(newStTime);
+                  // console.log("new time" + nT.toTimeString());
+                  list_id = countRes[0].dataValues.list_id;
+                  totalItems = countRes[0].dataValues.count;
+                  var data = {list_id:list_id,
+                        scheduled_time:jbData.scheduled_time,
+                        total_items:totalItems,
+                        total_numbers:jbData.total_numbers,
+                        numbers:jbData.numbers,
+                        sendMessageUrl:jbData.sendMessageUrl,
+                        user_id:jbData.user_id,
+                        twilio_token:jbData.twilio_token,
+                        twilio_sid:jbData.twilio_sid,
+                        message:jbData.message,
+                        type:jbData.type,
+                        mediaUrl:jbData.mediaUrl,
+                        subType:jbData.subType,
+			messageTmplId:jbData.messageTmplId
+                      }  
+                  console.log(data);
+                  var scheduleListMessage = agenda.create('send message to list', data);
+                  scheduleListMessage.repeatAt(data.scheduled_time).save();
+                  agenda.start();
+        });
+        count ++;
+        if(count >= mData.data.data.list_id.length)
+          clearInterval(listJob);
+      },1000);
+    } 
+  });
+  
+  // var data = {list_id:11,
+  //             scheduled_time:"2016-04-01 18:40:00",
+  //             total_items:1,
+  //             total_numbers:1,
+  //             numbers:[
+  //                   "+12402303447"
+  //                   ],
+  //             sendMessageUrl:"http://localhost:8000/sendTextMessage",
+  //             user_id:20,
+  //             twilio_token:"d7481d692abe70546f3885657255d1b8",
+  //             twilio_sid:"ACd8c66bb44e9d7fd1ab2c225c89d1967e",
+  //             message:"this is a test message from mass message sending script",
+  //             type:"sms",
+  //             mediaUrl:"",
+  //             subType:"general"
+  //           }
+
+  // var scheduleListMessage = agenda.create('send message to list', data)
+  // scheduleListMessage.repeatAt(data.scheduled_time).save();
+  // agenda.start();
+});
+
+/**
+** export PATH=/home/tezro/mongodb/mongodb-linux-i686-3.2.4/bin:$PATH
+** mongod --journal --storageEngine=mmapv1
+**/
+/**
+algo for sending
+
+from laravel
+list id
+total items
+total sending numbers
+
+job here in node
+match time with timezone
+if time to send message
+  generate urls with respect to sending numbers
+  maintain current list send count
+  maintain successfull sent log
+
+
+  20,000 total urls and 10 numbers
+  urls generated would be 2000 to hit in 2000 seconds or approx eta for job 34 mins
+  
+  20,000 total urls and 10 numbers
+  urls generated would be 2000 to hit in 2000 seconds or approx eta for job 34 mins
+
+  20,000 total urls and 20 numbers
+  urls generated would be 1000 to hit in 1000 seconds or approx eta for job 17 mins
+  
+catch 
+all users on list must opt-in to all round robin numbers.
+
+url be like
+http://localhost:8000/sendTextMessage/%user_id%/%list_id%/%total%/%current_pointer%
+  
+**/
+
+

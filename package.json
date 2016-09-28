@@ -1,0 +1,15 @@
+{
+  "name": "bumblebee-app-script",
+  "version": "1.0.0",
+  "description": "",
+  "author": "fahad@tezrosolutions.com",
+  "license": "MIT",
+  "dependencies": {
+    "agenda": "*",
+    "ioredis": "*",
+    "request":"*",
+    "mysql":"*",
+    "sequelize":"*",
+    "twilio":"*"
+  }
+}
