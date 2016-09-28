@@ -60,10 +60,10 @@ function getData(callBack){
 
 function startSendingRequests(callBack){
   callBack();
-}  
+}
 
 function updateCounts(jobData){
-  
+
   sequelize.query('SELECT * from bumblebee_counts where user_id='+ jobData.user_id +' and type="non-crm" and MONTH( NOW( ) ) = MONTH( billing_month )', { model: BBCounts }).then(function(count){
     // Each record will now be a instance of Project
     //console.log("from db result is",count);
@@ -73,13 +73,13 @@ function updateCounts(jobData){
         //BBCounts.create({user_id:20,type:'non-crm',count:1,updated_at:st});
 
         sequelize.query("INSERT INTO `bumblebee_counts` (`user_id`,`type`,`count`,`updated_at`,`billing_month`) VALUES ("+jobData.user_id+",'non-crm',1,'"+st+"','"+st+"')").spread(function(results, metadata) {
-         
+
         })
       }else{
         //update
         st = (new Date()).toISOString().substring(0, 19).replace('T', ' ');
         sequelize.query("UPDATE `bumblebee_counts` set count=count+1,updated_at='"+st+"',billing_month='"+st+"' where user_id="+jobData.user_id+" and type='non-crm'").spread(function(results, metadata) {
-         
+
         })
         console.log("update the record");
       }
@@ -89,7 +89,7 @@ function updateCounts(jobData){
 
 function prepData(mydata,done,client){
   console.log(mydata);
-  
+
   totalItems = mydata.total_items;
   listId = mydata.list_id;
   totalNumbers = mydata.total_numbers;
@@ -101,7 +101,7 @@ function sendMessagesToList(listId,totalItems,totalNumbers,numbers,jobData,done,
   var count = 0;
   var jobLimit = parseInt(totalItems)/parseInt(totalNumbers);
   console.log("job limit is" + jobLimit);
-  
+
   var page = 1;
   var limit = Math.ceil(parseInt(totalNumbers));
   var myJob = setInterval(function(){
@@ -117,7 +117,7 @@ function sendMessagesToList(listId,totalItems,totalNumbers,numbers,jobData,done,
     cquery +=  " WHERE lc.list_id ="+listId;
     cquery +=  " AND uc.id = lc.contact_id";
     cquery +=  " group by uc.phone";
-    cquery +=  " ORDER BY lc.id ASC"; 
+    cquery +=  " ORDER BY lc.id ASC";
     cquery +=  " LIMIT " +offset+ ", " +limit + ";";
 
     sequelize.query(cquery, { type: sequelize.QueryTypes.SELECT})
@@ -130,7 +130,7 @@ function sendMessagesToList(listId,totalItems,totalNumbers,numbers,jobData,done,
         }else{
           if(jobData.numbers.length > 1){
             fromNum = jobData.numbers[x]
-          }                      
+          }
         }
         if(fromNum){
           if(jobData.type == "sms"){
@@ -141,7 +141,7 @@ function sendMessagesToList(listId,totalItems,totalNumbers,numbers,jobData,done,
             console.log("body" + jobData.message)
 	    console.log(jobData.scheduled_time)
             console.log("***********************");*/
-	    	
+
             var t = jobData.scheduled_time.split(/[- :]/);
             // Apply each element to the Date function
             var d = new Date(Date.UTC(t[0], t[1]-1, t[2], t[3], t[4], t[5]));
@@ -167,7 +167,7 @@ function sendMessagesToList(listId,totalItems,totalNumbers,numbers,jobData,done,
             }
           }
           else{
-            
+
             if(jobData.type == "mms" && jobData.subType == "picture_message"){
               console.log("***********************");
               console.log("to" + users[x].phone)
@@ -197,36 +197,37 @@ function sendMessagesToList(listId,totalItems,totalNumbers,numbers,jobData,done,
                  }, function(error) {
                  	   console.error('message failed!  Reason: '+error.message);
                  });
-	       }	      
+	       }
 	      }
               //updateCounts(jobData);
             }
             if(jobData.type == "mms" && jobData.subType == "voice_message"){
              console.log(jobData);
-	     console.log("http://alpha.bumblebeeprospectingsystems.com/twiml/voice/"+jobData.messageTmplId); 
-	     console.log("voice message");
-  
-             console.log(jobData.scheduled_time)
-	      var t = jobData.scheduled_time.split(/[- :]/);
+      	     console.log("http://alpha.bumblebeeprospectingsystems.com/twiml/voice/"+jobData.messageTmplId);
+      	     console.log("voice message");
+
+                   console.log(jobData.scheduled_time)
+      	      var t = jobData.scheduled_time.split(/[- :]/);
               // Apply each element to the Date function
               var d = new Date(Date.UTC(t[0], t[1]-1, t[2], t[3], t[4], t[5]));
               var n = new Date();
               var diff = n - d;
               if( diff < FOUR_HOUR){
                 var index = sentNum.indexOf(users[x].phone);
-                if (index !== -1) {	
-		 client.calls.create({
-                	    url: "http://alpha.bumblebeeprospectingsystems.com/twiml/voice/"+jobData.messageTmplId,
-                  	    to: "+1"+users[x].phone,
-                   	    from: fromNum,
-               	 }, function(err, call) {
-                	    //process.stdout.write(call.sid);
-                   	   var index = sentNum.indexOf(users[x].phone);    // <-- Not supported in <IE9
-                      	   if (index !== -1) {
-                          	sentNum.splice(index, 1);
-                      	   } 
-			   console.error(call.sid);
+                if (index !== -1) {
+            		 client.calls.create({
+              	    url: "http://alpha.bumblebeeprospectingsystems.com/twiml/voice/"+jobData.messageTmplId,
+                	    to: "+1"+users[x].phone,
+                 	    from: fromNum,
+             	      }, function(err, call) {
+              	    //process.stdout.write(call.sid);
+                 	   var index = sentNum.indexOf(users[x].phone);
+                  	   if (index !== -1) {
+                      	sentNum.splice(index, 1);
+                  	   }
+            			   console.error(call.sid);
                	 });
+                }
               }
             }
           }
@@ -235,7 +236,7 @@ function sendMessagesToList(listId,totalItems,totalNumbers,numbers,jobData,done,
       }
     })
 
-    page++; //move on to next contact 
+    page++; //move on to next contact
     count++;
     if(count >= jobLimit){
       clearInterval(myJob);
@@ -257,7 +258,7 @@ agenda.define('send message to list', function(job, done) {
         startSendingRequests(function() {
           numbers = jobData.numbers;
           if(Object.prototype.toString.call( numbers ) === '[object Array]'){
-            prepData(jobData,done,client); 
+            prepData(jobData,done,client);
           }
         });
       });
@@ -268,15 +269,15 @@ agenda.define('send message to list', function(job, done) {
 });
 
 agenda.on('ready', function() {
- console.log("started"); 
+ console.log("started");
  redis.on('message', function (channel, message) {
     console.log('Receive message %s from channel %s', message, channel);
     mData = JSON.parse(message);
     //schedule it for individiual list
     if(mData.data.data.list_id.length > 0){
       var count = 0;
-      var listJob = setInterval(function(){ 
-        jbData = mData.data.data; 
+      var listJob = setInterval(function(){
+        jbData = mData.data.data;
         list = mData.data.data.list_id[count];
         sequelize.query('SELECT count(*) as count,list_id from lists_contacts where list_id='+ list ,
                   { model: ListContacts }).
@@ -303,7 +304,7 @@ agenda.on('ready', function() {
                         mediaUrl:jbData.mediaUrl,
                         subType:jbData.subType,
 			messageTmplId:jbData.messageTmplId
-                      }  
+                      }
                   console.log(data);
                   var scheduleListMessage = agenda.create('send message to list', data);
                   scheduleListMessage.repeatAt(data.scheduled_time).save();
@@ -313,9 +314,9 @@ agenda.on('ready', function() {
         if(count >= mData.data.data.list_id.length)
           clearInterval(listJob);
       },1000);
-    } 
+    }
   });
-  
+
   // var data = {list_id:11,
   //             scheduled_time:"2016-04-01 18:40:00",
   //             total_items:1,
@@ -360,19 +361,19 @@ if time to send message
 
   20,000 total urls and 10 numbers
   urls generated would be 2000 to hit in 2000 seconds or approx eta for job 34 mins
-  
+
   20,000 total urls and 10 numbers
   urls generated would be 2000 to hit in 2000 seconds or approx eta for job 34 mins
 
   20,000 total urls and 20 numbers
   urls generated would be 1000 to hit in 1000 seconds or approx eta for job 17 mins
-  
-catch 
+
+catch
 all users on list must opt-in to all round robin numbers.
 
 url be like
 http://localhost:8000/sendTextMessage/%user_id%/%list_id%/%total%/%current_pointer%
-  
+
 **/
 
 
