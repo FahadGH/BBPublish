@@ -179,10 +179,12 @@ function sendMessagesToList(listId,totalItems,totalNumbers,numbers,jobData,done,
               var t = jobData.scheduled_time.split(/[- :]/);
               // Apply each element to the Date function
               var d = new Date(Date.UTC(t[0], t[1]-1, t[2], t[3], t[4], t[5]));
-	      var n = new Date();
-	       var diff = n - d;
+      	      var n = new Date();
+      	      var diff = n - d;
               if( diff < FOUR_HOUR){
-		var index = sentNum.indexOf(users[x].phone);
+		            console.log(sentNum);
+                var index = sentNum.indexOf(users[x].phone);
+                console.log(index);
                 if (index !== -1) {
                	 var sendMessagePromise = client.sendMessage({
                 	    to:"+1"+users[x].phone, // Any number Twilio can deliver to
@@ -192,7 +194,7 @@ function sendMessagesToList(listId,totalItems,totalNumbers,numbers,jobData,done,
                	 });
               	 sendMessagePromise.then(function(message) {
                  	 sentNum.push(users[x].phone);
-			 console.log('message sent successfully',message);
+			             console.log('message sent successfully',message);
                  	 updateCounts(jobData);
                  }, function(error) {
                  	   console.error('message failed!  Reason: '+error.message);
