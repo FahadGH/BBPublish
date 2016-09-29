@@ -150,16 +150,15 @@ function sendMessagesToList(listId,totalItems,totalNumbers,numbers,jobData,done,
 
             if( diff < FOUR_HOUR){
               var index = sentNum.indexOf(users[x].phone);
-              if (index !== -1) {
-		       var sendMessagePromise = client.sendMessage({
+              if (index == -1) {
+		            var sendMessagePromise = client.sendMessage({
         	          to:"+1"+users[x].phone, // Any number Twilio can deliver to
                 	  from: fromNum, // A number you bought from Twilio and can use for outbound communication
                  	 body: jobData.message+" STOP to end." // body of the SMS message
               	});
              	 sendMessagePromise.then(function(message) {
-                	sentNum.push(users[x].phone);
-			console.log('message sent successfully',message);
-               	        updateCounts(jobData);
+                	console.log('message sent successfully',message);
+               	  updateCounts(jobData);
               	}, function(error) {
                 	  console.error('message failed!  Reason: '+error.message);
                 });
@@ -185,7 +184,7 @@ function sendMessagesToList(listId,totalItems,totalNumbers,numbers,jobData,done,
 		            console.log(sentNum);
                 var index = sentNum.indexOf(users[x].phone);
                 console.log(index);
-                if (index !== -1) {
+                if (index == -1) {
                	 var sendMessagePromise = client.sendMessage({
                 	    to:"+1"+users[x].phone, // Any number Twilio can deliver to
                	    	    from: fromNum, // A number you bought from Twilio and can use for outbound communication
@@ -197,7 +196,7 @@ function sendMessagesToList(listId,totalItems,totalNumbers,numbers,jobData,done,
 			             console.log('message sent successfully',message);
                  	 updateCounts(jobData);
                  }, function(error) {
-                 	   console.error('message failed!  Reason: '+error.message);
+                 	   console.log('message failed!  Reason: '+error.message);
                  });
 	       }
 	      }
@@ -216,7 +215,7 @@ function sendMessagesToList(listId,totalItems,totalNumbers,numbers,jobData,done,
               var diff = n - d;
               if( diff < FOUR_HOUR){
                 var index = sentNum.indexOf(users[x].phone);
-                if (index !== -1) {
+                if (index == -1) {
             		 client.calls.create({
               	    url: "http://alpha.bumblebeeprospectingsystems.com/twiml/voice/"+jobData.messageTmplId,
                 	    to: "+1"+users[x].phone,
@@ -227,7 +226,7 @@ function sendMessagesToList(listId,totalItems,totalNumbers,numbers,jobData,done,
                   	   if (index !== -1) {
                       	sentNum.splice(index, 1);
                   	   }
-            			   console.error(call.sid);
+            			   console.log(call.sid);
                	 });
                 }
               }
